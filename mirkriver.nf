@@ -18,7 +18,7 @@ else {
 //get reference geneome
 Channel
   .fromPath(params.reference_genome, checkIfExists: true, type: 'file')
-  .set { reference_genome }
+  .into { reference_genome; reference_genome_cluster }
 
 //get reference genome annotation
 Channel
@@ -55,7 +55,7 @@ process preProcessPacBioBAM {
   """
 }
 
-//Step2: get pbaa clusters
+//Step2.a: get pbaa clusters
 process pbaa {
   tag "$name"
   publishDir "${params.outdir}/pbaa_clustering", pattern: '*passed*', mode: 'copy', saveAs: {"${name}.clusters.passing.${file(it).getExtension()}"}
@@ -77,7 +77,41 @@ process pbaa {
   """
 }
 
-//Step2: map fastq to reference using minimap2
+//Step3.a: align all clusters
+process cluster_seq_alignment {
+  publishDir "${params.outdir}/cluster_alignment", mode: 'copy'
+
+  input:
+  file(clusters) from passed_clusters.collect()
+  file(reference) from  reference_genome_cluster
+
+  output:
+  file("cluster_alignment.fasta") into cluster_alignment
+
+  script:
+  """
+  cat *.fasta > all.fa
+  mafft all.fa > cluster_alignment.fasta
+  """
+}
+
+//Step4.a: get variants
+process cluster_variant_sites {
+  publishDir "${params.outdir}/cluster_variants", mode: 'copy'
+
+  input:
+  file(alignment) from cluster_alignment
+
+  output:
+  file("cluster_variants.vcf") into cluster_variants
+
+  script:
+  """
+  snp-sites -v -o cluster_variants.vcf ${alignment}
+  """
+}
+
+//Step2.b: map fastq to reference using minimap2
 process mapping_reads {
   tag "$name"
   publishDir "${params.outdir}/mapped", mode: 'copy'
@@ -94,10 +128,14 @@ process mapping_reads {
   """
 }
 
-//Step3: convert sam to sorted indexed bam
+//Step3.b: convert sam to sorted indexed bam
 process ivar_variant_calling {
   tag "$name"
   publishDir "${params.outdir}/variant_calls", mode: 'copy', saveAs: {"${name}.${file(it).getExtension()}"}
+
+  memory {2.GB * task.attempt}
+  errorStrategy {'retry'}
+  maxRetries 2
 
   input:
   set val(name), file(reads), file(reference), file(annotation) from mapped_reads
