@@ -25,6 +25,11 @@ Channel
   .fromPath(params.reference_gff, checkIfExists: true, type: 'file')
   .set { reference_genome_gff }
 
+//get snpEff annotation database
+Channel
+  .fromPath(params.snpEff_database, checkIfExists: true, type: 'file')
+  .set { snpeff_database_input }
+
 
 //combine reads with reference
 pacbio_reads
@@ -90,8 +95,8 @@ process cluster_seq_alignment {
 
   script:
   """
-  cat *.fasta > all.fa
-  mafft all.fa > cluster_alignment.fasta
+  cat ${clusters} > all.fa
+  mafft --6merpair --adjustdirection --addfragments all.fa ${reference} > cluster_alignment.fasta
   """
 }
 
@@ -107,7 +112,51 @@ process cluster_variant_sites {
 
   script:
   """
-  snp-sites -v -o cluster_variants.vcf ${alignment}
+  snp-sites -cb -v -o cluster_variants.vcf ${alignment}
+  """
+}
+
+//Step5.a: annotate variants
+process prep_variant_calls {
+  publishDir "${params.outdir}/cluster_variants", mode: 'copy'
+
+  input:
+  file(vcf) from cluster_variants
+
+  output:
+  file("*sample*.vcf") into prep_variant_calls
+
+  script:
+  """
+  bcftools annotate --rename-chrs <(printf '1\tNC_045512.2') ${vcf} > cluster_variants_chrom.vcf
+  for sample in \$(bcftools query -l cluster_variants_chrom.vcf); do
+    bcftools view -c1 -Ov -s \$sample -o \$sample.vcf cluster_variants_chrom.vcf
+  done
+  mv cluster_variants_chrom.vcf ${vcf}
+  """
+}
+
+//combine vcfs with snpEff database
+prep_variant_calls
+  .flatten()
+  .combine(snpeff_database_input)
+  .set { annotation_input }
+
+//Step6.a: annotate variants
+process annotate_variants {
+  publishDir "${params.outdir}/annotated_variants", mode: 'copy'
+
+  input:
+  tuple file(vcf), file(compressed_database) from annotation_input
+
+  output:
+  file(vcf) into annotated_variants
+
+  script:
+  """
+  tar -xzf ${compressed_database}
+  mv ${vcf} input.vcf
+  snpEff ann sc2 input.vcf > ${vcf}
   """
 }
 
