@@ -160,6 +160,22 @@ process annotate_variants {
   """
 }
 
+//Step7.a find lineage hits
+process find_hits {
+  publishDir "${params.outdir}/lineage_matches", mode: 'copy'
+
+  input:
+  file(annotation) from annotated_variants
+
+  output:
+  file("*.results.csv") into lineage_hits
+
+  script:
+  """
+  python /usr/src/app/partial_matching.py /usr/src/app/definitions ${annotation}
+  """
+}
+
 //Step2.b: map fastq to reference using minimap2
 process mapping_reads {
   tag "$name"
@@ -196,5 +212,21 @@ process ivar_variant_calling {
   """
     samtools view -b ${reads} | samtools sort > ${name}.bam
     samtools mpileup -aa -A -d 0 -B -Q 0 --reference ${reference} ${name}.bam | ivar variants -p ${name} -q ${params.minquality} -t ${params.minfreq} -m ${params.minreaddepth} -r ${reference} -g ${annotation}
+  """
+}
+
+//Final Step
+process summary {
+  publishDir "${params.outdir}", mode: 'copy'
+
+  input:
+  file(hits) from lineage_hits.collect()
+
+  output:
+  file("summary.csv") into results
+
+  script:
+  """
+  cat *.results.csv > summary.csv
   """
 }
