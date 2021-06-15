@@ -91,10 +91,24 @@ for score in scores:
     if score.alt_rule_required and score.alt_rule_hit:
         if score.score > highScorePoints:
             highScore = score
+            highScorePoints = score.score
     if not score.alt_rule_required:
         if score.score > highScorePoints:
             highScore = score
+            highScorePoints = score.score
 
 mutationHitList = '; '.join(highScore.mutations)
 with open(f'{sampleName}.results.csv','w') as outfile:
-    outfile.write(f'{sampleName},{highScore.label},{mutationHitList}')
+    outfile.write(f'{sampleName},{highScore.label},{mutationHitList}\n')
+
+print('---Hit List---')
+for score in scores:
+    print('--------------')
+    print(score.label)
+    print(score.mutations)
+    print(score.score)
+
+print('\n---Best Hit---')
+print(highScore.label)
+print(highScore.mutations)
+print(highScorePoints)
