@@ -227,6 +227,7 @@ process summary {
 
   script:
   """
-  cat *.results.csv > summary.csv
+  echo 'PBAA Cluster,Best Lineage Match,Matching Mutations,All Identified Mutations' > summary.csv
+  cat *.results.csv >> summary.csv
   """
 }

@@ -98,8 +98,9 @@ for score in scores:
             highScorePoints = score.score
 
 mutationHitList = '; '.join(highScore.mutations)
+allMutations = '; '.join(mutation_set)
 with open(f'{sampleName}.results.csv','w') as outfile:
-    outfile.write(f'{sampleName},{highScore.label},{mutationHitList}\n')
+    outfile.write(f'{sampleName},{highScore.label},{mutationHitList},{allMutations}\n')
 
 print('---Hit List---')
 for score in scores:
