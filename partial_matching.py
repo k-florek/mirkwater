@@ -4,6 +4,7 @@ import sys, os
 import vcf
 import json
 import glob
+import csv
 
 constellation_def_path = sys.argv[1]
 vcf_file_path = sys.argv[2]
@@ -15,11 +16,11 @@ threeTOone = {
     'His':'H','Arg':'R','Asn':'N','Asp':'D','Thr':'T'}
 
 #TODO:add synonmous mutations
-#TODO:fix issues with +E484K sites
 
 with open(vcf_file_path,'r') as vcffile:
     reader = vcf.Reader(vcffile)
     mutations = {}
+    sampleName = reader.samples[0]
     for record in reader:
         #Convert aa site from 3 to 1 abbv and pull out AA site
         aachange = record.INFO['ANN'][0].split('|')[10].split('.')[1]
@@ -37,32 +38,63 @@ for key in mutations.keys():
     mutation_set.append(aaformat)
 
 #read in all constellation defs
-constellations = {}
+class Constellation:
+    def __init__(self,label,sites,alt_rule=None):
+        self.label = label
+        self.sites = sites
+        self.alt_rule = alt_rule
+
+constellations = []
 for file in glob.glob(os.path.join(constellation_def_path,"*.json")):
     with open(file,'r') as inJSON:
         jsondata = json.load(inJSON)
-        try:
-            constellations[jsondata['label']] = jsondata['sites']
-        except KeyError:
-            constellations[jsondata['name']] = jsondata['sites']
+        alt_rule = None
+        for rules in jsondata['rules']:
+            if jsondata['rules'][rules] == 'alt':
+                alt_rule = rules
+                constellations.append(Constellation(jsondata['label'], jsondata['sites'],alt_rule))
+        if alt_rule == None:
+            constellations.append(Constellation(jsondata['label'], jsondata['sites']))
 
-score_table = {}
-for variant in constellations.keys():
-    for star in constellations[variant]:
+class Score:
+    def __init__(self,constellation,alt_rule = None):
+        self.label = constellation
+        self.score = 0
+        self.mutations = []
+        self.alt_rule = alt_rule
+        self.alt_rule_hit = False
+        if alt_rule != None:
+            self.alt_rule_required = True
+        else:
+            self.alt_rule_required = False
+
+    def hit(self,mutation):
+        self.mutations.append(mutation)
+        if self.alt_rule_required:
+            if mutation == self.alt_rule:
+                self.alt_rule_hit = True
+        self.score += 1
+
+
+scores = []
+for constellation in constellations:
+    score = Score(constellation.label,constellation.alt_rule)
+    for site in constellation.sites:
         for mutation in mutation_set:
-            if mutation.upper() == star.upper():
-                try:
-                    score_table[variant] += 1
-                except KeyError:
-                    score_table[variant] = 1
+            if mutation.upper() == site.upper():
+                score.hit(mutation.upper())
+    scores.append(score)
 
-highScore = 0
-result = ""
-for key in score_table.keys():
-    if score_table[key] > highScore:
-        highScore = score_table[key]
-        result = key
+highScore = None
+highScorePoints = 0
+for score in scores:
+    if score.alt_rule_required and score.alt_rule_hit:
+        if score.score > highScorePoints:
+            highScore = score
+    if not score.alt_rule_required:
+        if score.score > highScorePoints:
+            highScore = score
 
-print(f'The best match is: {result} with {highScore} matching mutations.')
-print('With the following mutations:')
-print(" ".join(mutation_set))
+mutationHitList = '; '.join(highScore.mutations)
+with open(f'{sampleName}.results.csv','w') as outfile:
+    outfile.write(f'{sampleName},{highScore.label},{mutationHitList}')
