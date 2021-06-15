@@ -9,4 +9,4 @@ Usage:
 `./mirkwater.nf --pacbio <path to dir with ccs bam files>`
 
 
-*Name note: Mirkwood is a dark fictional forest in novels by Sir Walter Scott, William Morris, and by J. R. R. Tolkien. Since this workflow looks SARS-CoV-2 genomes in wastewater the name seemed fitting.*
+*Name note: Mirkwood is a dark fictional forest in novels written by Sir Walter Scott, William Morris, and J. R. R. Tolkien. Since this workflow looks SARS-CoV-2 genomes in wastewater the name seemed fitting.*
